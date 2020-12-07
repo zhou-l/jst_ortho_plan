@@ -77,6 +77,8 @@ for i = 1:length(CC.PixelIdxList)
 end
 % minLenThres = 50;
 skel = bwskel(bwUpper);
+X = bwmorph(skel, 'spur', inf);
+imshow(X);
 B = bwmorph(skel, 'branchpoints');
 E = bwmorph(skel, 'endpoints');
 [y,x] = find(E);
@@ -89,14 +91,64 @@ hold off;
 
 B_loc = find(B);
 E_loc = find(E);
-Dmask = false(size(skel));
+% Dmask = false(size(skel));
+D_list = cell(numel(x1),1);
+% distToBranchPt = realmax;
 for k = 1:numel(x1)
-    D = bwdistgeodesic(skel,x1(k),y1(k));
-    distanceToBranchPt = min(D(B_loc));
-    Dmask(D < distanceToBranchPt) =true;
+     D = bwdistgeodesic(skel,x1(k),y1(k));
+     D_list{k} = D;
 end
-skelD = skel-Dmask;
-imshow(skelD);
+
+for k = 1:numel(x1)
+    Dmask = false(size(skel));
+
+    distToBranchPt = realmax;
+
+%     D = bwdistgeodesic(skel,x1(k),y1(k));
+    aE = 1; % find the associated end point of the branch
+    for j = 1:numel(x)     
+            isDirectConnect = true;
+        for kk = 1:numel(x1)
+            if kk == k
+                continue;
+            end
+            
+            if  D_list{k}(y(j),x(j)) > D_list{kk}(y(j),x(j))%make sure the branch pt does not go through another branch pt
+                isDirectConnect = false;
+                break;
+            end
+        end
+        
+        if isDirectConnect
+            if  D_list{k}(y(j),x(j)) < distToBranchPt 
+                distToBranchPt =  D_list{k}(y(j),x(j));
+                aE = j;
+            end
+        end
+    end
+    aE
+    % compute the property of the branch
+   
+    if y(aE)<y1(k) % if the branch is going up, remove it
+        % make a horizontal cut
+        Dmask(min(y1(k),y(aE)):max(y1(k),y(aE)),:) = true;
+        Bskel = bwUpper & ~Dmask;
+        Bskel = bwmorph(Bskel, 'spur');
+        figure,imshow(Bskel);
+        stats = regionprops('table',Bskel,'Centroid',...
+            'MajorAxisLength','MinorAxisLength')
+        break;
+    end
+    
+%     Dmask(D_list{k}<distToBranchPt) = true;
+
+
+%    distanceToBranchPt = min(D(E_loc));
+    
+%    Dmask(D < distanceToBranchPt) =true;
+end
+% skelD = skel-Dmask;
+% imshow(skelD);
 hold all;
 
 
