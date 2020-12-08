@@ -127,6 +127,7 @@ for k = 1:numel(x1)
     end
     aE
     % compute the property of the branch
+   
     if y(aE)<y1(k) % if the branch is going up, remove it
         % make a horizontal cut
         cutBranch = aE;
@@ -151,7 +152,7 @@ skelInd = find(Bskel);
 lastVecL = [0 1];
 simpK = [];
 % get end points
-extendTopPt = [realmax,-realmax];
+extendTopPt = [-realmax,-realmax];
 extendEndPt = [-realmax,-realmax];
 %Bd = ind2sub(size(Bskel),skelInd);
 for i = 1:numel(skelInd)-1
@@ -161,7 +162,7 @@ for i = 1:numel(skelInd)-1
     line = [sPtY,sPtX,endPtY,endPtX];
     vecL = [line(3)-line(1),line(4)-line(2)];
     % get top and end pts
-    if endPtY < extendTopPt(1)  % y is flipped in Matlab-- top is min
+    if endPtY > extendTopPt(1) 
          extendTopPt(1) = endPtY;
          extendTopPt(2) = endPtX;
     end
@@ -170,6 +171,7 @@ for i = 1:numel(skelInd)-1
         extendEndPt(2) = endPtX;
         extendEndPt(1) = endPtY;
     end
+    
     
     if norm(vecL) > 1e-4 
         vecL = vecL / norm(vecL);
@@ -191,13 +193,11 @@ for i = 1:numel(skelInd)-1
     end
 end
 
-figure; imshow(tmp); hold on;
+figure; imshow(Bskel); hold on;
 [simpPtY,simpPtX] = ind2sub(size(Bskel), simpK);
 plot(simpPtX,simpPtY, 'LineWidth', 3); 
-plot([extendTopPt(2),extendEndPt(2)], [extendTopPt(1),extendEndPt(1)], 'r');
+plot(extendTopPt, );
 hold off;
-
-
 % find the convex hull of points
 % [k,av] = convhull(Bd);
 % find the boundary (nonconvex) shape of points
