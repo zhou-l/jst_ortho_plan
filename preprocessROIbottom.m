@@ -1,6 +1,12 @@
-function preprocessROIbottom(ROIfname)
+function eBottom = preprocessROIbottom(ROIfname, zisRight)
 close all;
 I = imread(ROIfname);
+if nargin < 2
+    isRight = true;
+else
+    isRight = zisRight;
+end
+
 dimI = size(I);
 if length(dimI)>=3
     I = rgb2gray(I);
@@ -9,162 +15,125 @@ I = im2double(I);
 imshow(I);
 % tmp = imdiffusefilt(I);
 
+
 %use scale space???
 
 [gradThresh,numIter] = imdiffuseest(I,'ConductionMethod','quadratic');
 tmp = imdiffusefilt(I,'ConductionMethod','quadratic', ...
     'GradientThreshold',gradThresh,'NumberOfIterations',numIter);
 tmp = impyramid(tmp,'reduce');
+tmp = imdiffusefilt(tmp);
 
-tmp = imdiffusefilt(tmp);
-tmp = imdiffusefilt(tmp);
+% tmp = imdiffusefilt(tmp);
 [Gmag, Gdir]=imgradient(tmp);
+
+Gmag = imdiffusefilt(Gmag);
 imshowpair(tmp, Gmag, 'montage');
 
-% normalize values
 Gmag = rescale(Gmag, 0, 1);
 tmp = rescale(tmp, 0, 1);
+% % try detecting corner points...
+% corners = detectHarrisFeatures(tmp);
+% imshow(tmp); hold on;
+% plot(corners.selectStrongest(50));
 
+BWE = edge(tmp, 'Canny');
+imshowpair(tmp, BWE, 'montage');
 
-% extract regions with Low Gmag and High intensity
-Iupper = zeros(size(tmp));
-Ilower = zeros(size(tmp));
-
-gradThresUpperBone = 0.2;
-valThresUpperBone = 0.7;
-
-gradThresLowerBone = 0.17;
-gradThresLowerBone2 = 0.45;
-valThresLowerBone = 0.7;
-
-uidx1 = Gmag(:,:) < gradThresUpperBone;
-uidx2 = tmp(:,:) > valThresUpperBone; 
-
-lidx1 = Gmag(:,:) > gradThresLowerBone;
-lidx2 = tmp(:,:) > valThresLowerBone;
-
-idx = uidx1 & uidx2;
-% idx = uidx2;
-Iupper(idx) = tmp(idx);
-lidx = lidx1 & lidx2;
-Ilower(lidx) = tmp(lidx);
-
-lidx3 = Gmag(:,:) > gradThresLowerBone2;
-Ilower(lidx3) = tmp(lidx3);
-
-% show the thresholded image and ask the user to draw a point
-imshowpair(tmp, Gmag, 'montage');
-figure,imshowpair(tmp, Ilower, 'montage');
-bwLower = false(size(Ilower));
-bwLower(lidx) = true;
-figure,imshow(bwLower);
-% bwUpper = bwmorph(bwUpper, 'bridge'); % bridge small gaps in the BW
+% for the bottom part, Canny edge detection does a fairly good job! 
+% We could start from there directly
+bwLower = bwmorph(BWE, 'clean');
 bwLower = bwmorph(bwLower, 'spur');
+ figure;imshow(bwLower); 
+CC = bwconncomp(bwLower) 
 
-CC = bwconncomp(bwLower, 4) 
-figure;
+skel = bwLower;
 numPixels = cellfun(@numel,CC.PixelIdxList);
 [biggest,idx] = max(numPixels);
-% bwUpper(CC.PixelIdxList{idx}) = 0;
-  imshow(bwLower); 
-% h = drawpoint;
-  [xi, yi, but] = ginput(1);
-  xi = int16(xi);
-  yi = int16(yi);
-  ptIdx = int16((xi-1)*size(tmp,1)+yi);
-  ptIdx2 = sub2ind(size(tmp), yi, xi);
+mainCC = idx;
+
+% % Ask the user to choose the bottom boundary (mainCC)
+% % h = drawpoint;
+%   [xi, yi, but] = ginput(1);
+%   xi = int16(xi);
+%   yi = int16(yi);
+%   ptIdx = int16((xi-1)*size(tmp,1)+yi);
+%   ptIdx2 = sub2ind(size(tmp), yi, xi);
+%   
+% mainCC = 0;
+% for i = 1:length(CC.PixelIdxList)
+%     pxList = CC.PixelIdxList{i};
+%     if isempty(find(pxList == ptIdx, 1))
+%         skel(CC.PixelIdxList{i})= 0;
+%         continue;
+%     else
+%         disp('CC found!');
+%         mainCC = i;
+%     end
+% end
+if mainCC < 1
+    warning('Failed to find the bottom boundary!');
+    return;
+end
+
+% and search for the vertical CC
+vertCC = 0;
+minLenThres = 15;
 for i = 1:length(CC.PixelIdxList)
-    pxList = CC.PixelIdxList{i};
-    if isempty(find(pxList == ptIdx, 1))
-        bwLower(CC.PixelIdxList{i})= 0;
+    if mainCC == i
         continue;
-    else
-        disp('CC found!');
     end
-end
-% minLenThres = 50;
-skel = bwskel(bwLower);
-X = bwmorph(skel, 'spur', inf);
-imshow(X);
-B = bwmorph(skel, 'branchpoints');
-E = bwmorph(skel, 'endpoints');
-[y,x] = find(E);
-[y1,x1] = find(B);
-
-figure; imshow(skel);hold on;
-plot(x,y,'ro');
-plot(x1,y1,'bo');
-hold off;
-
-B_loc = find(B);
-E_loc = find(E);
-% Dmask = false(size(skel));
-D_list = cell(numel(x1),1);
-% distToBranchPt = realmax;
-for k = 1:numel(x1)
-     D = bwdistgeodesic(skel,x1(k),y1(k));
-     D_list{k} = D;
-end
-
-cutBranch = 0;
-for k = 1:numel(x1)
-    Dmask = false(size(skel));
-    distToBranchPt = realmax;
-%     D = bwdistgeodesic(skel,x1(k),y1(k));
-    aE = 1; % find the associated end point of the branch
-    for j = 1:numel(x)     
-            isDirectConnect = true;
-        for kk = 1:numel(x1)
-            if kk == k
-                continue;
-            end
-            
-            if  D_list{k}(y(j),x(j)) > D_list{kk}(y(j),x(j))%make sure the branch pt does not go through another branch pt
-                isDirectConnect = false;
-                break;
-            end
-        end
+    pxList = CC.PixelIdxList{i};
+    [ptSy,ptSx] = ind2sub(size(tmp),pxList(1));
+    [ptTy,ptTx] = ind2sub(size(tmp),pxList(end));
+    % sort Y from small to large
+    if ptSy > ptTy
+        ys = ptSy;
+        ptSy = ptTy;
+        ptTy = ys;
         
-        if isDirectConnect
-            if  D_list{k}(y(j),x(j)) < distToBranchPt 
-                distToBranchPt =  D_list{k}(y(j),x(j));
-                aE = j;
-            end
-        end
+        xs = ptSx;
+        ptSx = ptTx;
+        ptTx = xs;
+        
     end
-    aE
-    % compute the property of the branch
-    if y(aE)<y1(k) % if the branch is going up, remove it
-        % make a horizontal cut
-        cutBranch = aE;
-        Dmask(min(y1(k),y(aE)):max(y1(k),y(aE)),:) = true;
-        Bskel = skel & ~Dmask;
-        Bskel = bwmorph(Bskel, 'spur');
-        Bskel = bwmorph(Bskel, 'spur');
-        Bskel = bwmorph(Bskel, 'spur');
-        figure,imshow(Bskel);
-        stats = regionprops('table',Bskel,'Centroid',...
-            'MajorAxisLength','MinorAxisLength')
-        break;
+    dir = [ptTx - ptSx, ptTy - ptSy];
+    dir = normalize(dir,'norm',2);
+    %% NOTE: If it's right leg
+    if numel(pxList) <= minLenThres
+        continue;
     end
     
-%     Dmask(D_list{k}<distToBranchPt) = true;
-%    distanceToBranchPt = min(D(E_loc));    
-%    Dmask(D < distanceToBranchPt) =true;
+    if isRight
+        theta = acos(dot(dir,[1,0]));
+    else
+        theta = acos(dot(dir,[-1,0]));
+    end
+    if theta - pi/2 < 0 && -theta + pi/2 < pi/4 % The vertical edge should go from bottom right to top left
+        skel(CC.PixelIdxList{i}) = true;
+        vertCC = i;
+    end 
 end
+% skel = bwmorph(skel, 'thicken');
+% skel = bwmorph(skel,'bridge');
+% 
+%  E = bwmorph(skel, 'endpoints');
+%  imshow(skel); hold on;
+% [y1,x1] = find(E);
+% plot(x1,y1,'ro');
 
 % trace end points without cutBranch
-skelInd = find(Bskel);
 lastVecL = [0 1];
 simpK = [];
 % get end points
 extendTopPt = [realmax,-realmax];
 extendEndPt = [-realmax,-realmax];
 %Bd = ind2sub(size(Bskel),skelInd);
-for i = 1:numel(skelInd)-1
+skelInd = CC.PixelIdxList{mainCC};
+for i = 1:numel(CC.PixelIdxList{mainCC})-1
     j = skelInd(i); j2 = skelInd(i+1);
-    [endPtY, endPtX] = ind2sub([size(Bskel,1),size(Bskel,2)], j);
-    [sPtY,sPtX] = ind2sub([size(Bskel,1),size(Bskel,2)], j2);
+    [endPtY, endPtX] = ind2sub(size(tmp), j);
+    [sPtY,sPtX] = ind2sub(size(tmp), j2);
     line = [sPtY,sPtX,endPtY,endPtX];
     vecL = [line(3)-line(1),line(4)-line(2)];
     % get top and end pts
@@ -199,43 +168,73 @@ for i = 1:numel(skelInd)-1
 end
 
 figure; imshow(tmp); hold on;
-[simpPtY,simpPtX] = ind2sub(size(Bskel), simpK);
+[simpPtY,simpPtX] = ind2sub(size(tmp), simpK);
 plot(simpPtX,simpPtY, 'LineWidth', 3); 
-plot([extendTopPt(2),extendEndPt(2)], [extendTopPt(1),extendEndPt(1)], 'r');
+
+
+lastVecL = [0 1];
+simpK = [];
+% get end points
+extendTopPtVert = [realmax,-realmax];
+extendEndPtVert = [-realmax,-realmax];
+%Bd = ind2sub(size(Bskel),skelInd);
+skelInd = CC.PixelIdxList{vertCC};
+for i = 1:numel(skelInd)-1
+    j = skelInd(i); j2 = skelInd(i+1);
+    [endPtY, endPtX] = ind2sub(size(tmp), j);
+    [sPtY,sPtX] = ind2sub(size(tmp), j2);
+    line = [sPtY,sPtX,endPtY,endPtX];
+    vecL = [line(3)-line(1),line(4)-line(2)];
+    % get top and end pts
+    if endPtY < extendTopPtVert(1)  % y is flipped in Matlab-- top is min
+         extendTopPtVert(1) = endPtY;
+         extendTopPtVert(2) = endPtX;
+    end
+    
+    if endPtX > extendEndPtVert(2)
+        extendEndPtVert(2) = endPtX;
+        extendEndPtVert(1) = endPtY;
+    end
+    
+    if norm(vecL) > 1e-4 
+        vecL = vecL / norm(vecL);
+    else
+        vecL = [0 0];
+    end
+    % angle difference is small
+    if dot(lastVecL,vecL)>cos(pi/30)
+        if i == numel(skelInd)-1
+            simpK(end+1,:) = j2;
+        end
+        continue;     
+    else
+        simpK(end+1,:) = j;
+        if i == numel(skelInd)-1
+            simpK(end+1,:) = j2;
+        end
+        lastVecL = vecL;     
+    end
+end
+
+% scale back to the original image
+
+extendTopPt = extendTopPt .*2;
+extendTopPtVert = extendTopPtVert .*2;
+figure; imshow(I); hold on;
+eBottom = [extendTopPt extendTopPtVert];
+plot([extendTopPt(2),extendTopPtVert(2)], [extendTopPt(1),extendTopPtVert(1)], 'r');
 hold off;
 
-
-% find the convex hull of points
-% [k,av] = convhull(Bd);
-% find the boundary (nonconvex) shape of points
-% skelD = skel-Dmask;
-% imshow(skelD);
-hold all;
-
-% bwUpper = bwUpper  bwUpperX;
-imshow(bwLower);
-
-
-figure;
-subplot(4, 1,1);
-imshowpair(I, tmp, 'montage');
-subplot(4,1,2);
-imshowpair(tmp, Gmag, 'montage');
-subplot(4,1,3);
-% upper bone boundary
-imshowpair(Gmag, Iupper, 'montage');
-subplot(4,1,4);
-% lower bone boundary
-imshowpair(tmp, lidx1, 'montage');
-
-
-
-% % find skeleton 
-% SK = bwmorph(gpuArray(Iupper), 'skel', Inf);
-% % SK = bwmorph(gpuArray(M), 'thin', Inf);
-% 
-% % find the contour of the image
-% SK = bwperim(Iupper, 8);
-% [B, L] = bwboundaries(Iupper);
+% figure;
+% subplot(4, 1,1);
+% imshowpair(I, tmp, 'montage');
+% subplot(4,1,2);
+% imshowpair(tmp, Gmag, 'montage');
+% subplot(4,1,3);
+% % upper bone boundary
+% imshowpair(Gmag, Iupper, 'montage');
+% subplot(4,1,4);
+% % lower bone boundary
+% imshowpair(tmp, lidx1, 'montage');
 
 
