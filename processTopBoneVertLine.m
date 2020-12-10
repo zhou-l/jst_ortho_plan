@@ -1,5 +1,5 @@
 function eTopVert = processTopBoneVertLine(ROIfname, zisRight)
-close all;
+% close all;
 I = imread(ROIfname);
 if nargin < 2
     isRight = true;

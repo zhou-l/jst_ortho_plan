@@ -22,9 +22,13 @@ end
 Ifull = im2double(Ifull);
 %% 1. ask the user to draw a roi rectangle for the 10cm measurement
 hI = imshow(Ifull);
-roi10cm = drawrectangle;
-pos10cm = customWait(roi10cm); % pos is [x, y, width, height]
-npix10cm = pos10cm(4); % get the length in pixels of 10cm
+
+% roi10cm = drawrectangle;
+% pos10cm = customWait(roi10cm); % pos is [x, y, width, height]
+% npix10cm = pos10cm(4); % get the length in pixels of 10cm
+
+% we are too lazy and we konw that the 10cm is 784 pixels
+npix10cm = 784;
 
 lineScale = 800; % the length of vectors
 %% 2. ask the user to interactively draw a roi rectangle to select the joint of interest
@@ -41,6 +45,7 @@ figure; imshow(Ir); hold on;
 plot([eTop(2),eTop(4)],[eTop(1),eTop(3)],'r');
 plot([eBot(2),eBot(4)],[eBot(1),eBot(3)],'b');
 hold off;
+
 % transform the lines back to the full image
 eTop(1) = eTop(1) + pos(2); eTop(3) = eTop(3) + pos(2); 
 eTop(2) = eTop(2) + pos(1); eTop(4) = eTop(4) + pos(1); 
@@ -85,13 +90,34 @@ plot([eTop(2),eTop(4)],[eTop(1),eTop(3)],'r');
 plot([eBot(2),eBot(4)],[eBot(1),eBot(3)],'b');
 plot([eTopVert(2),eTopVert(4)],[eTopVert(1),eTopVert(3)],'r', 'LineWidth', 2);
 plot([eBotVert(2),eBotVert(4)],[eBotVert(1),eBotVert(3)],'b', 'LineWidth', 2);
-hold off;
+% hold off;
 
-% imshow(Ifull);hold on;
-% plot([eTop(2),eTop(4)],[eTop(1),eTop(3)],'r');
-% plot([eBot(2),eBot(4)],[eBot(1),eBot(3)],'b');
-% plot([eBot(2),eBot(4)],[eBot(1),eBot(3)],'b');
-% %%
+
+%% 5. find the intersection of two vertical axes
+vAxLower = eBotVert;
+vAxUpper = eTopVert;
+hAxLower = eBot;
+hAxUpper = eTop;
+
+dx = vAxLower(2) - vAxUpper(2);
+dy = vAxLower(1) - vAxUpper(1);
+det = vAxLower(3) * vAxUpper(4) - vAxLower(4) * vAxUpper(3);
+if abs(det) < 1e-8
+    warning('This is a rare case that two axes do not intersect! Quit!');
+    return ;
+end
+% find the intersection point
+u = (dy * vAxLower(4) - dx * vAxLower(3)) / det; 
+v = (dy * vAxUpper(4) - dx * vAxUpper(3)) / det;
+
+intPt = [vAxLower(1) + v * vAxLower(3),vAxLower(2) + v * vAxLower(4)]
+plot(intPt(2),intPt(1), 'ro');
+
+% % draw horizontal axis at this point
+hPt0 = [intPt(2)-scale* hAxUpper(:,4), intPt(1)-scale* hAxUpper(:,3)];
+hPt1 = [intPt(2)+scale* hAxUpper(:,4), intPt(1)+scale* hAxUpper(:,3)];
+plot([hPt0(1),hPt1(1)], [hPt0(2), hPt1(2)], 'LineWidth', 3);
+
 %%4. find the bottom vertical line
 % 
 % I_xRayInput = Ifull;

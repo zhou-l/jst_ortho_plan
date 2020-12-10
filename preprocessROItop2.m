@@ -108,17 +108,23 @@ if mainCC < 1
 end
 skel = false(size(tmp));
 skel(CC.PixelIdxList{mainCC}) = true;
-figure, imshow(skel); 
+
 %% and search for the vertical CC
 bwV = edge(tmp, 'Canny');
+[bwV,threshout] = edge(tmp, 'Canny');
+[bwV,threshout2] = edge(tmp, 'Canny', [threshout(2)*0.8,threshout(2)*1.5]);
+
+figure, imshowpair(skel, bwV, 'montage'); 
 VCC = bwconncomp(bwV) ;
 vertCC = 0;
 minLenThres = 20;
 
 minXDist = realmax;
 mainPxList = CC.PixelIdxList{mainCC};
-   [ptSy,ptSx] = ind2sub(size(tmp),pxList);
-    mainPxListMeanY = mean(ptSy);
+[ptSy,ptSx] = ind2sub(size(tmp),mainPxList);
+mainPxListMinY = min(ptSy);
+mainPxListMaxY = max(ptSy);
+mainPxListMuY = mean(ptSy);
 for i = 1:length(VCC.PixelIdxList)
     pxList = VCC.PixelIdxList{i};
     if numel(pxList) <= minLenThres
@@ -150,7 +156,8 @@ for i = 1:length(VCC.PixelIdxList)
     if theta - pi/2 < 0 && -theta + pi/2 < pi/4 % The vertical edge should go from bottom right to top left
 %         skel(VCC.PixelIdxList{i}) = true;
         % and the vertical range of the vertical edge should cover the main CC
-        if mainPxListMeanY >= ptSy && mainPxListMeanY <= ptTy
+        if (mainPxListMinY >= ptSy && mainPxListMinY <= ptTy) ||...
+           (mainPxListMuY >= ptSy && mainPxListMuY <= ptTy)
             dist =  abs(min(norm(endPt - [ptSy,ptSx]), norm(endPt-[ptTy,ptTx])));
             if dist < minXDist
                 minXDist = dist;

@@ -1,4 +1,4 @@
-function eBottom2 = preprocessROIbottom(ROIfname, zisRight)
+function eBottom = preprocessROIbottom(ROIfname, zisRight)
 global npix10cm;
 if isempty(npix10cm)
     znipx10cm = 724; % a default value
