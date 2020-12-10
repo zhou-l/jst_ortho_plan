@@ -46,19 +46,33 @@ eBot(2) = eBot(2) + pos(1); eBot(4) = eBot(4) + pos(1);
 imshow(Ifull);hold on;
 plot([eTop(2),eTop(4)],[eTop(1),eTop(3)],'r');
 plot([eBot(2),eBot(4)],[eBot(1),eBot(3)],'b');
-
+hold off;
 %% 3. find the top vertical line
 %% 3.1 find the 8cm on top of the mid-point of eTop
 eTopCtr = [0.5 * (eTop(1) + eTop(3)), 0.5 * (eTop(2) + eTop(4))];
 eTop8cm = int16(-0.8 * npix10cm + eTopCtr(1));
 eTop13cm = int16(-1.3 * npix10cm + eTopCtr(1));
 
+topleftOffset = [eTop13cm, int16(0.5*size(Ifull,2))];
 Itop = Ifull(eTop13cm:eTop8cm,int16(0.5*size(Ifull,2)):size(Ifull,2));
 figure, imshow(Itop);
 imwrite(Itop,'topBoneVertLineROI.png');
-eTopVert = processTopBoneVertLine('topBoneVertLineROI.png');
+% the vertical line of the top bone
+eTopVert = processTopBoneVertLine('topBoneVertLineROI.png'); % [ys xs yt xt]
+eTopVert(1) = eTopVert(1) + topleftOffset(1); eTopVert(3) = eTopVert(3) + topleftOffset(1);
+eTopVert(2) = eTopVert(2) + topleftOffset(2); eTopVert(4) = eTopVert(4) + topleftOffset(2);
 
+imshow(Ifull);hold on;
+plot([eTop(2),eTop(4)],[eTop(1),eTop(3)],'r');
+plot([eBot(2),eBot(4)],[eBot(1),eBot(3)],'b');
+plot([eTopVert(2),eTopVert(4)],[eTopVert(1),eTopVert(3)],'r');
+hold off;
 % eBot(2) = eBot(2) + pos(1); eBot(4) = eBot(4) + pos(1); 
+
+%% 4. find the bottom vertical line
+Ibot = Ifull(pos(2)-100:pos(2)+pos(4)+100,pos(1)-100:pos(1)+pos(3)+100);
+imwrite(Ibot,'botBoneVertLineROI.png');
+eBotVert = processBotBoneVertLine('botBoneVertLineROI.png');% line segments are stored as [ys xs yt xt]
 
 imshow(Ifull);hold on;
 plot([eTop(2),eTop(4)],[eTop(1),eTop(3)],'r');
@@ -70,18 +84,8 @@ plot([eBot(2),eBot(4)],[eBot(1),eBot(3)],'b');
 I_xRayInput = Ifull;
 [Gmag, Gdir] = imgradient(Ifull,'sobel');
 imshow(Gmag);
-% alpha(hI, 0.7);
-hold on;
-isLower = false;
-[hAxUpper, vAxUpper, boundUpper, kUpper] = findUpperBoneAxis(I_xRayInput, I_upperBoneROI);
-hold on;
-isLower = true;
-[hAxLower, vAxLower, boundLower, kLower] = findLowerBoneAxis(I_xRayInput, I_lowerBoneROI);
-isLower = false;
-[hAxUpper, vAxUpper, boundUpper, kUpper] = findBoneAxis(xRayUpperFname, segMaskUpperBWFile, isLower);
-hold on;
-isLower = true;
-[hAxLower, vAxLower, boundLower, kLower] = findBoneAxis(xRayLowerFname, segMaskLowerBWFile, isLower);
+% alpha(hI, 0.7);[
+
 
 scale = 600;
 

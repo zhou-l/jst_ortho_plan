@@ -73,11 +73,11 @@ end
 [muSB,muSI] = sort(muXlist,'ascend');
     
 if isRight
-   inInBoneCC = muSB(muSI(1),2);%left most long CC
-   inOutBoneCC = muSB(muSI(2),2); %second left most long CC
+   inInBoneCC = muSB(1,2);%left most long CC
+   inOutBoneCC = muSB(2,2); %second left most long CC
 else
-   inInBoneCC = muSB(muSI(4),2);%right most long CC
-   inOutBoneCC = muSB(muSI(3),2); %second right most long CC
+   inInBoneCC = muSB(4,2);%right most long CC
+   inOutBoneCC = muSB(3,2); %second right most long CC
 end
 
 skel(CC.PixelIdxList{inInBoneCC}) = true;
