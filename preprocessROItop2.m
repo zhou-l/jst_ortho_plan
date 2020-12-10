@@ -24,6 +24,7 @@ tmp = imdiffusefilt(I,'ConductionMethod','quadratic', ...
 tmp = impyramid(tmp,'reduce');
 
 tmp = imdiffusefilt(tmp);
+
 [Gmag, Gdir]=imgradient(tmp);
 
 % normalize values
@@ -31,20 +32,26 @@ Gmag = rescale(Gmag, 0, 1);
 tmp = rescale(tmp, 0, 1);
 
 %% extract high intensity boundary of the top part
-gradThresUpperBone = 0.3;
-valThresUpperBone = 0.7;
+gradThresUpperBone = 0.2;
+valThresUpperBone = 0.75;
 
 uidx1 = Gmag(:,:) < gradThresUpperBone;
 uidx2 = tmp(:,:) > valThresUpperBone; 
 
-idx = uidx2 & uidx1 ;
+% idx = uidx2 & uidx1 ;
+idx = uidx2; 
 
 tmpX = zeros(size(tmp));
 tmpX(idx) = tmp(idx);
+[BWEo,threshOut]  = edge(tmp, 'Canny');
+[BWEo, thresOut2] = edge(tmp, 'Canny', [threshOut(2)*0.8, threshOut(2) * 1.5]);
+figure, imshow(BWEo);
+
 
 imshowpair(tmp, Gmag, 'montage');
 figure, imshowpair(tmpX, tmp, 'montage');
 [BWE,threshOut]  = edge(tmpX, 'Canny');
+figure, imshow(BWE);
 % bwUpper = bwmorph(BWE, 'bridge',5); % bridge small gaps in the BW
 CC = bwconncomp(BWE);
 % get CCs that are positioned on top
@@ -61,7 +68,7 @@ end
 
 [muSB,muSI] = sort(muYlist);
 bwUpper = false(size(BWE));
-% fetch top 10 mean y CCs
+%% fetch top 10 mean y CCs
 topCCNum = min([10,length(muYlist),numel(CC.PixelIdxList)]);
 for i = 1:topCCNum
     pxList = CC.PixelIdxList{muSI(i)};
@@ -84,7 +91,7 @@ figure; imshow(bwUpper);
 numPixels = cellfun(@numel,CC.PixelIdxList);
 [nB,nI] = sort(numPixels,'descend');
 minSy = realmax;
-% get the top most CC
+%% get the top most CC
 for i = 1:topCCNum
     pxList = CC.PixelIdxList{nI(i)};
    [ptSy,ptSx] = ind2sub(size(tmp),pxList);
@@ -109,6 +116,9 @@ vertCC = 0;
 minLenThres = 20;
 
 minXDist = realmax;
+mainPxList = CC.PixelIdxList{mainCC};
+   [ptSy,ptSx] = ind2sub(size(tmp),pxList);
+    mainPxListMeanY = mean(ptSy);
 for i = 1:length(VCC.PixelIdxList)
     pxList = VCC.PixelIdxList{i};
     if numel(pxList) <= minLenThres
@@ -139,11 +149,14 @@ for i = 1:length(VCC.PixelIdxList)
     end
     if theta - pi/2 < 0 && -theta + pi/2 < pi/4 % The vertical edge should go from bottom right to top left
 %         skel(VCC.PixelIdxList{i}) = true;
-        dist =  abs(min(norm(endPt - [ptSy,ptSx]), norm(endPt-[ptTy,ptTx])));
-        if dist < minXDist
-            minXDist = dist;
-            vertCC = i;
-   
+        % and the vertical range of the vertical edge should cover the main CC
+        if mainPxListMeanY >= ptSy && mainPxListMeanY <= ptTy
+            dist =  abs(min(norm(endPt - [ptSy,ptSx]), norm(endPt-[ptTy,ptTx])));
+            if dist < minXDist
+                minXDist = dist;
+                vertCC = i;
+
+            end
         end
     end 
 end

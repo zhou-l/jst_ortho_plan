@@ -13,3 +13,5 @@ if length(dimI)>=3
 end
 I = im2double(I);
 imshow(I);
+
+%% find the width of the bone

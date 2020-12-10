@@ -1,4 +1,11 @@
-function eBottom = preprocessROIbottom(ROIfname, zisRight)
+function eBottom2 = preprocessROIbottom(ROIfname, zisRight)
+global npix10cm;
+if isempty(npix10cm)
+    znipx10cm = 724; % a default value
+else
+    znipx10cm = npix10cm;
+end
+%% find the horizontal line of the bottom bone at the joint
 close all;
 I = imread(ROIfname);
 if nargin < 2
@@ -33,21 +40,32 @@ imshowpair(tmp, Gmag, 'montage');
 Gmag = rescale(Gmag, 0, 1);
 tmp = rescale(tmp, 0, 1);
 % % try detecting corner points...
-% corners = detectHarrisFeatures(tmp);
-% imshow(tmp); hold on;
-% plot(corners.selectStrongest(50));
+%% extract high intensity boundary of the bottom  part
+gradThresBone = 0.2;
+valThresBone = 0.7;
 
-BWE = edge(tmp, 'Canny');
-imshowpair(tmp, BWE, 'montage');
+uidx1 = Gmag(:,:) > gradThresBone;
+uidx2 = tmp(:,:) > valThresBone; 
+idx = uidx2; %uidx1 & uidx2; 
+tmpX = zeros(size(tmp));
+tmpX(idx) = tmp(idx);
+
+[BWE,threshout] = edge(tmp, 'Canny');
+[BWE,threshout2] = edge(tmp, 'Canny', [threshout(2)*0.6,threshout(2)*1.5]);
+figure; imshowpair(tmpX, BWE, 'montage');
+BWEo = BWE & imbinarize(tmpX);
+figure; imshowpair(BWEo, BWE, 'montage');
 
 % for the bottom part, Canny edge detection does a fairly good job! 
 % We could start from there directly
 bwLower = bwmorph(BWE, 'clean');
 bwLower = bwmorph(bwLower, 'spur');
+
+% bwLower = bwmorph(bwLower, 'bridge');
  figure;imshow(bwLower); 
 CC = bwconncomp(bwLower) 
 
-skel = bwLower;
+skel = false(size(tmp));
 numPixels = cellfun(@numel,CC.PixelIdxList);
 [biggest,idx] = max(numPixels);
 mainCC = idx;
@@ -75,10 +93,12 @@ if mainCC < 1
     warning('Failed to find the bottom boundary!');
     return;
 end
+skel(CC.PixelIdxList{mainCC}) = true;
 
 % and search for the vertical CC
 vertCC = 0;
 minLenThres = 15;
+strongestEGmag = -realmax;
 for i = 1:length(CC.PixelIdxList)
     if mainCC == i
         continue;
@@ -110,10 +130,16 @@ for i = 1:length(CC.PixelIdxList)
         theta = acos(dot(dir,[-1,0]));
     end
     if theta - pi/2 < 0 && -theta + pi/2 < pi/4 % The vertical edge should go from bottom right to top left
-        skel(CC.PixelIdxList{i}) = true;
-        vertCC = i;
+        eGmag = mean(Gmag(CC.PixelIdxList{i}));
+        if eGmag > strongestEGmag % and the edge should be strong
+           strongestEGmag = eGmag;
+           vertCC = i;
+       end
     end 
 end
+skel(CC.PixelIdxList{vertCC}) = true;
+figure; imshow(skel);
+
 % skel = bwmorph(skel, 'thicken');
 % skel = bwmorph(skel,'bridge');
 % 
@@ -122,7 +148,6 @@ end
 % [y1,x1] = find(E);
 % plot(x1,y1,'ro');
 
-% trace end points without cutBranch
 lastVecL = [0 1];
 simpK = [];
 % get end points
@@ -216,13 +241,64 @@ for i = 1:numel(skelInd)-1
     end
 end
 
+%% drop the line a bit to find the width of the bottom bone
+eBottom2 = [extendTopPt extendTopPtVert];
+dropDist = znipx10cm * 0.05 / 2; % drop down by 5mm--- and consider the scaling factor of 1/2
+% find the perpendicular line to eBottom
+dBot = normalize(eBottom2(3:4)-eBottom2(1:2),'norm',2);
+if ~isRight
+    dBot = -dBot;
+end
+dVert = [dBot(2), -dBot(1)];
+dropPt = dVert .* dropDist + 0.5 .* (eBottom2(1:2) + eBottom2(3:4));
+dropLs = dropPt - dBot * 50;
+dropLt = dropPt + dBot * 50;
+% find the intersections of the line and the bone 
+% do ray marching for the outer side
+stepSize = 1;
+s = dropLt;
+eBottom = [dropLs dropLt];
+outerVertBoundary = CC.PixelIdxList{vertCC};
+nstep = 500;
+for i = 1:nstep
+    if s(1) > size(tmp,1) || s(1) < 1 || s(2) > size(tmp,2) || s(2) < 1
+        break;
+    end
+    s = s + dBot * stepSize;
+    idxs = sub2ind(size(tmp), int16(s(1)), int16(s(2)));
+    hitPts = find(outerVertBoundary==idxs, 1);
+    if ~isempty(hitPts)
+        eBottom(3:4) = int16(s);
+        break;
+    end
+end
+% ray marching for the inner side
+s = dropLt;
+innerBoundary = CC.PixelIdxList{mainCC};
+for i = 1:nstep
+    if s(1) > size(tmp,1) || s(1) < 1 || s(2) > size(tmp,2) || s(2) < 1
+        break;
+    end
+    s = s - dBot * stepSize;
+    idxs = sub2ind(size(tmp), int16(s(1)), int16(s(2)));
+    hitPts = find(innerBoundary==idxs, 1);
+    if ~isempty(hitPts)
+        eBottom(1:2) = int16(s);
+        break;
+    end
+end
+figure; imshow(tmp); hold on;
+plot([extendTopPt(2),extendTopPtVert(2)], [extendTopPt(1),extendTopPtVert(1)], 'b');
+plot([eBottom(2),eBottom(4)], [eBottom(1),eBottom(3)],'r');
+hold off;
+
 % scale back to the original image
 
-extendTopPt = extendTopPt .*2;
-extendTopPtVert = extendTopPtVert .*2;
 figure; imshow(I); hold on;
-eBottom = [extendTopPt extendTopPtVert];
-plot([extendTopPt(2),extendTopPtVert(2)], [extendTopPt(1),extendTopPtVert(1)], 'r');
+eBottom = 2 .* eBottom;
+eBottom2 = 2 .* eBottom2;
+plot([eBottom2(2),eBottom2(4)], [eBottom2(1),eBottom2(3)], 'b');
+plot([eBottom(2),eBottom(4)], [eBottom(1),eBottom(3)],'r');
 hold off;
 
 % figure;
